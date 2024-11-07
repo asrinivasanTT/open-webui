@@ -25,6 +25,7 @@ from open_webui.env import (
     AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST,
     ENABLE_FORWARD_USER_INFO_HEADERS,
     BYPASS_MODEL_ACCESS_CONTROL,
+    PASSTHROUGH_LLMBACKEND_HEADERS,
 )
 from open_webui.models.users import UserModel
 
@@ -677,6 +678,14 @@ async def generate_chat_completion(
         session = aiohttp.ClientSession(
             trust_env=True, timeout=aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT)
         )
+        if PASSTHROUGH_LLMBACKEND_HEADERS is not None:
+            passthrough_headers_list = PASSTHROUGH_LLMBACKEND_HEADERS.split(",")
+            for passthrough_header in passthrough_headers_list:
+                passthrough_header_value = request.cookies.get(passthrough_header, None)
+                if passthrough_header_value is not None:
+                    session.cookie_jar.update_cookies(
+                        {passthrough_header: passthrough_header_value}
+                    )
 
         r = await session.request(
             method="POST",

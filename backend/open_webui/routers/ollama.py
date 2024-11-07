@@ -9,7 +9,7 @@ import os
 import random
 import re
 import time
-from typing import Optional, Union
+from typing import Optional, Union, Dict
 from urllib.parse import urlparse
 import aiohttp
 from aiocache import cached
@@ -57,6 +57,7 @@ from open_webui.env import (
     AIOHTTP_CLIENT_TIMEOUT,
     AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST,
     BYPASS_MODEL_ACCESS_CONTROL,
+    PASSTHROUGH_LLMBACKEND_HEADERS,
 )
 from open_webui.constants import ERROR_MESSAGES
 
@@ -116,6 +117,7 @@ async def send_post_request(
     key: Optional[str] = None,
     content_type: Optional[str] = None,
     user: UserModel = None,
+    headers: Dict = {},
 ):
 
     r = None
@@ -123,6 +125,8 @@ async def send_post_request(
         session = aiohttp.ClientSession(
             trust_env=True, timeout=aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT)
         )
+
+        session.cookie_jar.update_cookies(headers)
 
         r = await session.post(
             url,
@@ -1037,11 +1041,20 @@ async def generate_completion(
     if prefix_id:
         form_data.model = form_data.model.replace(f"{prefix_id}.", "")
 
+    headers = {}
+    if PASSTHROUGH_LLMBACKEND_HEADERS is not None:
+        passthrough_headers_list = PASSTHROUGH_LLMBACKEND_HEADERS.split(",")
+        for passthrough_header in passthrough_headers_list:
+            passthrough_header_value = request.cookies.get(passthrough_header, None)
+            if passthrough_header_value is not None:
+                headers[passthrough_header] = passthrough_header_value
+
     return await send_post_request(
         url=f"{url}/api/generate",
         payload=form_data.model_dump_json(exclude_none=True).encode(),
         key=get_api_key(url_idx, url, request.app.state.config.OLLAMA_API_CONFIGS),
         user=user,
+        headers=headers,
     )
 
 
@@ -1164,6 +1177,13 @@ async def generate_chat_completion(
     prefix_id = api_config.get("prefix_id", None)
     if prefix_id:
         payload["model"] = payload["model"].replace(f"{prefix_id}.", "")
+    headers = {}
+    if PASSTHROUGH_LLMBACKEND_HEADERS is not None:
+        passthrough_headers_list = PASSTHROUGH_LLMBACKEND_HEADERS.split(",")
+        for passthrough_header in passthrough_headers_list:
+            passthrough_header_value = request.cookies.get(passthrough_header, None)
+            if passthrough_header_value is not None:
+                headers[passthrough_header] = passthrough_header_value
 
     return await send_post_request(
         url=f"{url}/api/chat",
@@ -1172,6 +1192,7 @@ async def generate_chat_completion(
         key=get_api_key(url_idx, url, request.app.state.config.OLLAMA_API_CONFIGS),
         content_type="application/x-ndjson",
         user=user,
+        headers=headers,
     )
 
 
@@ -1268,6 +1289,13 @@ async def generate_openai_completion(
 
     if prefix_id:
         payload["model"] = payload["model"].replace(f"{prefix_id}.", "")
+    headers = {}
+    if PASSTHROUGH_LLMBACKEND_HEADERS is not None:
+        passthrough_headers_list = PASSTHROUGH_LLMBACKEND_HEADERS.split(",")
+        for passthrough_header in passthrough_headers_list:
+            passthrough_header_value = request.cookies.get(passthrough_header, None)
+            if passthrough_header_value is not None:
+                headers[passthrough_header] = passthrough_header_value
 
     return await send_post_request(
         url=f"{url}/v1/completions",
@@ -1275,6 +1303,7 @@ async def generate_openai_completion(
         stream=payload.get("stream", False),
         key=get_api_key(url_idx, url, request.app.state.config.OLLAMA_API_CONFIGS),
         user=user,
+        headers=headers,
     )
 
 
@@ -1347,6 +1376,13 @@ async def generate_openai_chat_completion(
     prefix_id = api_config.get("prefix_id", None)
     if prefix_id:
         payload["model"] = payload["model"].replace(f"{prefix_id}.", "")
+    headers = {}
+    if PASSTHROUGH_LLMBACKEND_HEADERS is not None:
+        passthrough_headers_list = PASSTHROUGH_LLMBACKEND_HEADERS.split(",")
+        for passthrough_header in passthrough_headers_list:
+            passthrough_header_value = request.cookies.get(passthrough_header, None)
+            if passthrough_header_value is not None:
+                headers[passthrough_header] = passthrough_header_value
 
     return await send_post_request(
         url=f"{url}/v1/chat/completions",
@@ -1354,6 +1390,7 @@ async def generate_openai_chat_completion(
         stream=payload.get("stream", False),
         key=get_api_key(url_idx, url, request.app.state.config.OLLAMA_API_CONFIGS),
         user=user,
+        headers=headers,
     )
 
 

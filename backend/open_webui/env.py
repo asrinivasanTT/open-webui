@@ -442,3 +442,10 @@ AUDIT_EXCLUDED_PATHS = os.getenv("AUDIT_EXCLUDED_PATHS", "/chats,/chat,/folders"
 )
 AUDIT_EXCLUDED_PATHS = [path.strip() for path in AUDIT_EXCLUDED_PATHS]
 AUDIT_EXCLUDED_PATHS = [path.lstrip("/") for path in AUDIT_EXCLUDED_PATHS]
+
+
+####################################
+# PASSTHROUGH_LLMBACKEND_HEADERS
+####################################
+
+PASSTHROUGH_LLMBACKEND_HEADERS = os.environ.get("PASSTHROUGH_LLMBACKEND_HEADERS", None)
