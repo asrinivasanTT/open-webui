@@ -5,7 +5,7 @@ import os
 import random
 import re
 import time
-from typing import Optional, Union
+from typing import Optional, Union, Dict
 from urllib.parse import urlparse
 
 import aiohttp
@@ -24,7 +24,7 @@ from open_webui.env import AIOHTTP_CLIENT_TIMEOUT
 
 
 from open_webui.constants import ERROR_MESSAGES
-from open_webui.env import SRC_LOG_LEVELS
+from open_webui.env import SRC_LOG_LEVELS, PASSTHROUGH_SESSION_COOKIES
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -141,13 +141,18 @@ async def cleanup_response(
 
 
 async def post_streaming_url(
-    url: str, payload: Union[str, bytes], stream: bool = True, content_type=None
+    url: str,
+    payload: Union[str, bytes],
+    stream: bool = True,
+    content_type=None,
+    cookies: Dict = {},
 ):
     r = None
     try:
         session = aiohttp.ClientSession(
             trust_env=True, timeout=aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT)
         )
+        session.cookie_jar.update_cookies(cookies)
         r = await session.post(
             url,
             data=payload,
@@ -702,6 +707,7 @@ class GenerateCompletionForm(BaseModel):
 @app.post("/api/generate/{url_idx}")
 async def generate_completion(
     form_data: GenerateCompletionForm,
+    request: Request,
     url_idx: Optional[int] = None,
     user=Depends(get_verified_user),
 ):
@@ -722,8 +728,18 @@ async def generate_completion(
     url = app.state.config.OLLAMA_BASE_URLS[url_idx]
     log.info(f"url: {url}")
 
+    cookies = {}
+    if PASSTHROUGH_SESSION_COOKIES is not None:
+        passthrough_cookies_list = PASSTHROUGH_SESSION_COOKIES.split(",")
+        for passthrough_cookie in passthrough_cookies_list:
+            passthrough_cookie_value = request.cookies.get(passthrough_cookie, None)
+            if passthrough_cookie_value is not None:
+                cookies[passthrough_cookie] = passthrough_cookie_value
+
     return await post_streaming_url(
-        f"{url}/api/generate", form_data.model_dump_json(exclude_none=True).encode()
+        f"{url}/api/generate",
+        form_data.model_dump_json(exclude_none=True).encode(),
+        cookies=cookies,
     )
 
 
@@ -759,6 +775,7 @@ def get_ollama_url(url_idx: Optional[int], model: str):
 @app.post("/api/chat/{url_idx}")
 async def generate_chat_completion(
     form_data: GenerateChatCompletionForm,
+    request: Request,
     url_idx: Optional[int] = None,
     user=Depends(get_verified_user),
     bypass_filter: Optional[bool] = False,
@@ -801,11 +818,20 @@ async def generate_chat_completion(
     log.info(f"url: {url}")
     log.debug(f"generate_chat_completion() - 2.payload = {payload}")
 
+    cookies = {}
+    if PASSTHROUGH_SESSION_COOKIES is not None:
+        passthrough_cookies_list = PASSTHROUGH_SESSION_COOKIES.split(",")
+        for passthrough_cookie in passthrough_cookies_list:
+            passthrough_cookie_value = request.cookies.get(passthrough_cookie, None)
+            if passthrough_cookie_value is not None:
+                cookies[passthrough_cookie] = passthrough_cookie_value
+
     return await post_streaming_url(
         f"{url}/api/chat",
         json.dumps(payload),
         stream=form_data.stream,
         content_type="application/x-ndjson",
+        cookies=cookies,
     )
 
 
@@ -833,6 +859,7 @@ class OpenAIChatCompletionForm(BaseModel):
 @app.post("/v1/chat/completions/{url_idx}")
 async def generate_openai_chat_completion(
     form_data: dict,
+    request: Request,
     url_idx: Optional[int] = None,
     user=Depends(get_verified_user),
 ):
@@ -868,10 +895,19 @@ async def generate_openai_chat_completion(
     url = get_ollama_url(url_idx, payload["model"])
     log.info(f"url: {url}")
 
+    cookies = {}
+    if PASSTHROUGH_SESSION_COOKIES is not None:
+        passthrough_cookies_list = PASSTHROUGH_SESSION_COOKIES.split(",")
+        for passthrough_cookie in passthrough_cookies_list:
+            passthrough_cookie_value = request.cookies.get(passthrough_cookie, None)
+            if passthrough_cookie_value is not None:
+                cookies[passthrough_cookie] = passthrough_cookie_value
+
     return await post_streaming_url(
         f"{url}/v1/chat/completions",
         json.dumps(payload),
         stream=payload.get("stream", False),
+        cookies=cookies,
     )
 
 

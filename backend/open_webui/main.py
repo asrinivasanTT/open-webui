@@ -367,7 +367,10 @@ async def get_content_from_response(response) -> Optional[str]:
 
 
 async def chat_completion_tools_handler(
-    body: dict, user: UserModel, extra_params: dict
+    body: dict,
+    user: UserModel,
+    extra_params: dict,
+    request: Request,
 ) -> tuple[dict, dict]:
     # If tool_ids field is present, call the functions
     metadata = body.get("metadata", {})
@@ -417,7 +420,9 @@ async def chat_completion_tools_handler(
         raise e
 
     try:
-        response = await generate_chat_completions(form_data=payload, user=user)
+        response = await generate_chat_completions(
+            form_data=payload, request=request, user=user
+        )
         log.debug(f"{response=}")
         content = await get_content_from_response(response)
         log.debug(f"{content=}")
@@ -590,7 +595,9 @@ class ChatCompletionMiddleware(BaseHTTPMiddleware):
         body["metadata"] = metadata
 
         try:
-            body, flags = await chat_completion_tools_handler(body, user, extra_params)
+            body, flags = await chat_completion_tools_handler(
+                body, user, extra_params, request
+            )
             contexts.extend(flags.get("contexts", []))
             citations.extend(flags.get("citations", []))
         except Exception as e:
@@ -1094,7 +1101,10 @@ async def get_models(user=Depends(get_verified_user)):
 
 @app.post("/api/chat/completions")
 async def generate_chat_completions(
-    form_data: dict, user=Depends(get_verified_user), bypass_filter: bool = False
+    form_data: dict,
+    request: Request,
+    user=Depends(get_verified_user),
+    bypass_filter: bool = False,
 ):
     model_id = form_data["model"]
 
@@ -1147,7 +1157,7 @@ async def generate_chat_completions(
                     yield chunk
 
             response = await generate_chat_completions(
-                form_data, user, bypass_filter=True
+                form_data, request, user, bypass_filter=True
             )
             return StreamingResponse(
                 stream_wrapper(response.body_iterator), media_type="text/event-stream"
@@ -1155,18 +1165,22 @@ async def generate_chat_completions(
         else:
             return {
                 **(
-                    await generate_chat_completions(form_data, user, bypass_filter=True)
+                    await generate_chat_completions(
+                        form_data, request, user, bypass_filter=True
+                    )
                 ),
                 "selected_model_id": selected_model_id,
             }
     if model.get("pipe"):
-        return await generate_function_chat_completion(form_data, user=user)
+        return await generate_function_chat_completion(
+            form_data, request=request, user=user
+        )
     if model["owned_by"] == "ollama":
         # Using /ollama/api/chat endpoint
         form_data = convert_payload_openai_to_ollama(form_data)
         form_data = GenerateChatCompletionForm(**form_data)
         response = await generate_ollama_chat_completion(
-            form_data=form_data, user=user, bypass_filter=True
+            form_data=form_data, request=request, user=user, bypass_filter=True
         )
         if form_data.stream:
             response.headers["content-type"] = "text/event-stream"
@@ -1177,7 +1191,9 @@ async def generate_chat_completions(
         else:
             return convert_response_ollama_to_openai(response)
     else:
-        return await generate_openai_chat_completion(form_data, user=user)
+        return await generate_openai_chat_completion(
+            form_data, request=request, user=user
+        )
 
 
 @app.post("/api/chat/completed")
@@ -1520,7 +1536,9 @@ async def update_task_config(form_data: TaskConfigForm, user=Depends(get_admin_u
 
 
 @app.post("/api/task/title/completions")
-async def generate_title(form_data: dict, user=Depends(get_verified_user)):
+async def generate_title(
+    form_data: dict, request: Request, user=Depends(get_verified_user)
+):
     print("generate_title")
 
     model_id = form_data["model"]
@@ -1596,11 +1614,15 @@ Artificial Intelligence in Healthcare
     if "chat_id" in payload:
         del payload["chat_id"]
 
-    return await generate_chat_completions(form_data=payload, user=user)
+    return await generate_chat_completions(
+        form_data=payload, request=request, user=user
+    )
 
 
 @app.post("/api/task/tags/completions")
-async def generate_chat_tags(form_data: dict, user=Depends(get_verified_user)):
+async def generate_chat_tags(
+    form_data: dict, request: Request, user=Depends(get_verified_user)
+):
     print("generate_chat_tags")
     model_id = form_data["model"]
     if model_id not in app.state.MODELS:
@@ -1665,11 +1687,15 @@ JSON format: { "tags": ["tag1", "tag2", "tag3"] }
     if "chat_id" in payload:
         del payload["chat_id"]
 
-    return await generate_chat_completions(form_data=payload, user=user)
+    return await generate_chat_completions(
+        form_data=payload, request=request, user=user
+    )
 
 
 @app.post("/api/task/query/completions")
-async def generate_search_query(form_data: dict, user=Depends(get_verified_user)):
+async def generate_search_query(
+    form_data: dict, request: Request, user=Depends(get_verified_user)
+):
     print("generate_search_query")
     if not app.state.config.ENABLE_SEARCH_QUERY:
         raise HTTPException(
@@ -1742,11 +1768,15 @@ Search Query:"""
     if "chat_id" in payload:
         del payload["chat_id"]
 
-    return await generate_chat_completions(form_data=payload, user=user)
+    return await generate_chat_completions(
+        form_data=payload, request=request, user=user
+    )
 
 
 @app.post("/api/task/emoji/completions")
-async def generate_emoji(form_data: dict, user=Depends(get_verified_user)):
+async def generate_emoji(
+    form_data: dict, request: Request, user=Depends(get_verified_user)
+):
     print("generate_emoji")
 
     model_id = form_data["model"]
@@ -1810,11 +1840,15 @@ Message: """{{prompt}}"""
     if "chat_id" in payload:
         del payload["chat_id"]
 
-    return await generate_chat_completions(form_data=payload, user=user)
+    return await generate_chat_completions(
+        form_data=payload, request=request, user=user
+    )
 
 
 @app.post("/api/task/moa/completions")
-async def generate_moa_response(form_data: dict, user=Depends(get_verified_user)):
+async def generate_moa_response(
+    form_data: dict, request: Request, user=Depends(get_verified_user)
+):
     print("generate_moa_response")
 
     model_id = form_data["model"]
@@ -1871,7 +1905,9 @@ Responses from models: {{responses}}"""
     if "chat_id" in payload:
         del payload["chat_id"]
 
-    return await generate_chat_completions(form_data=payload, user=user)
+    return await generate_chat_completions(
+        form_data=payload, request=request, user=user
+    )
 
 
 ##################################

@@ -382,3 +382,9 @@ else:
 ####################################
 
 OFFLINE_MODE = os.environ.get("OFFLINE_MODE", "false").lower() == "true"
+
+####################################
+# PASSTHROUGH_SESSION_COOKIES
+####################################
+
+PASSTHROUGH_SESSION_COOKIES = os.environ.get("PASSTHROUGH_SESSION_COOKIES", None)
